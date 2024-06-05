@@ -12,6 +12,11 @@ export default function HomeScreen() {
   const [calories, setCalories] = useState({ today: 0, week: 0, month: 0 });
   const [personalBests, setPersonalBests] = useState({ fastest5k: '', heaviestDeadlift: '', longestPlank: '' });
   const [challenges, setChallenges] = useState([]);
+  const [bestCaloriesDay, setBestCaloriesDay] = useState('');
+  const [bestExerciseDay, setBestExerciseDay] = useState('');
+  const [dailyCalories, setDailyCalories] = useState({});
+  const [weeklyTotal, setWeeklyTotal] = useState(0);
+  const [monthlyTotal, setMonthlyTotal] = useState(0);
 
   useEffect(() => {
     const loadData = async () => {
@@ -27,14 +32,16 @@ export default function HomeScreen() {
 
         if (savedDailyCalories) {
           const parsedDailyCalories = JSON.parse(savedDailyCalories);
-          // Oblicz sumę kalorii na dzień, tydzień i miesiąc
+          setDailyCalories(parsedDailyCalories);
+
+          // Calculate calories
           let todayCalories = 0;
           let weekCalories = 0;
           let monthCalories = 0;
           const today = moment().format('YYYY-MM-DD');
           const startOfWeek = moment().startOf('isoWeek').format('YYYY-MM-DD');
           const startOfMonth = moment().startOf('month').format('YYYY-MM-DD');
-  
+
           Object.entries(parsedDailyCalories).forEach(([date, calories]) => {
             if (date === today) {
               todayCalories += parseInt(calories);
@@ -46,7 +53,7 @@ export default function HomeScreen() {
               monthCalories += parseInt(calories);
             }
           });
-  
+
           setCalories({
             today: todayCalories,
             week: weekCalories,
@@ -61,12 +68,61 @@ export default function HomeScreen() {
         if (savedHeading) setHeading(savedHeading);
         if (savedSubheading) setSubheading(savedSubheading);
         if (savedInstruction) setInstruction(savedInstruction);
+
       } catch (error) {
         console.error('Failed to load data', error);
       }
     };
     loadData();
   }, []);
+
+  useEffect(() => {
+    const calculateTotals = () => {
+      const weekStart = moment().startOf('week');
+      const weekEnd = moment().endOf('week');
+      const monthStart = moment().startOf('month');
+      const monthEnd = moment().endOf('month');
+
+      let weekTotal = 0;
+      let monthTotal = 0;
+      let maxCaloriesDate = null;
+      let maxExerciseDate = null;
+      let maxCalories = 0;
+      let maxExerciseDuration = 0;
+
+      for (let date in dailyCalories) {
+        const calorieDate = moment(date);
+        const calories = parseInt(dailyCalories[date]) || 0;
+
+        if (calorieDate.isBetween(weekStart, weekEnd, null, '[]')) {
+          weekTotal += calories;
+        }
+        if (calorieDate.isBetween(monthStart, monthEnd, null, '[]')) {
+          monthTotal += calories;
+        }
+
+        if (calories > maxCalories) {
+          maxCalories = calories;
+          maxCaloriesDate = date;
+        }
+      }
+
+      recentExercises.forEach((exercise) => {
+        const duration = parseInt(exercise.duration) || 0;
+        if (duration > maxExerciseDuration) {
+          maxExerciseDuration = duration;
+          maxExerciseDate = moment().format('YYYY-MM-DD');
+        }
+      });
+
+      setWeeklyTotal(weekTotal);
+      setMonthlyTotal(monthTotal);
+      setBestCaloriesDay(maxCaloriesDate);
+      setBestExerciseDay(maxExerciseDate);
+    };
+
+    calculateTotals();
+  }, [dailyCalories, recentExercises]);
 
   return (
     <ScrollView contentContainerStyle={styles.dashboard}>
@@ -119,15 +175,14 @@ export default function HomeScreen() {
 
       <View style={styles.personalBests}>
         <Text style={styles.heading}>Najlepsze Wyniki</Text>
-        <View>
-          <Text>gówno: {personalBests.fastest5k}</Text>
-        </View>
+        <Text>Dzień z największą ilością spalonych kalorii: {bestCaloriesDay}</Text>
+        <Text>Dzień z najdłuższym czasem wykonywanych ćwiczeń w obecnym tygodniu: {bestExerciseDay}</Text>
       </View>
 
       <View style={styles.challenges}>
         <Text style={styles.heading}>Wyzwania</Text>
         {challenges.map((challenge, index) => (
-          <View key={index} style={styles.row}>
+          <View key={index} style={styles.row2}>
             <Text style={styles.cell}>{challenge}</Text>
           </View>
         ))}
@@ -213,6 +268,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  row2: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 5,
   },
   cellHeader: {
     flex: 1,

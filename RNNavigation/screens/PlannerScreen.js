@@ -7,25 +7,20 @@ import moment from 'moment';
 export default function PlannerScreen() {
   const [weeklySchedule, setWeeklySchedule] = useState([]);
   const [recentExercises, setRecentExercises] = useState([]);
-
   const [personalBests, setPersonalBests] = useState({ fastest5k: '', heaviestDeadlift: '', longestPlank: '' });
-  
   const [challenges, setChallenges] = useState([]);
   const [newChallenge, setNewChallenge] = useState('');
-
+  const [editedChallenges, setEditedChallenges] = useState({});
   const [newExercise, setNewExercise] = useState({ exercise: '', duration: '' });
   const [newSchedule, setNewSchedule] = useState({ day: '', exercise: '', time: '' });
-
-  const [editedChallenges, setEditedChallenges] = useState({});
-  
   const [calories, setCalories] = useState({ today: 0, week: 0, month: 0 });
   const [dailyCalories, setDailyCalories] = useState({});
   const [newCalories, setNewCalories] = useState('');
   const [selectedDate, setSelectedDate] = useState(moment().format('YYYY-MM-DD'));
-
+  const [bestCaloriesDay, setBestCaloriesDay] = useState('');
+  const [bestExerciseDay, setBestExerciseDay] = useState('');
   const [weeklyTotal, setWeeklyTotal] = useState(0);
   const [monthlyTotal, setMonthlyTotal] = useState(0);
-
   const [heading, setHeading] = useState('Dzień Dobry Mistrzu!');
   const [subheading, setSubheading] = useState('Czas na nowy tydzień 🌞');
   const [instruction, setInstruction] = useState('Pamiętaj o nawodnieniu i zakończeniu sesji chłodnym spacerem i dodatkowym rozciąganiem, aby wspomóc regenerację. Miłego dnia!');
@@ -88,23 +83,45 @@ export default function PlannerScreen() {
       const weekEnd = moment().endOf('week');
       const monthStart = moment().startOf('month');
       const monthEnd = moment().endOf('month');
-
+    
       let weekTotal = 0;
       let monthTotal = 0;
-
+      let maxCaloriesDate = null;
+      let maxExerciseDate = null;
+      let maxCalories = 0;
+      let maxExerciseDuration = 0;
+    
       for (let date in dailyCalories) {
         const calorieDate = moment(date);
+        const calories = parseInt(dailyCalories[date]) || 0;
+    
         if (calorieDate.isBetween(weekStart, weekEnd, null, '[]')) {
-          weekTotal += parseInt(dailyCalories[date]) || 0;
+          weekTotal += calories;
         }
         if (calorieDate.isBetween(monthStart, monthEnd, null, '[]')) {
-          monthTotal += parseInt(dailyCalories[date]) || 0;
+          monthTotal += calories;
+        }
+    
+        if (calories > maxCalories) {
+          maxCalories = calories;
+          maxCaloriesDate = date;
         }
       }
+    
 
+      recentExercises.forEach((exercise) => {
+        const duration = parseInt(exercise.duration) || 0;
+        if (duration > maxExerciseDuration) {
+          maxExerciseDuration = duration;
+          maxExerciseDate = moment().format('YYYY-MM-DD');
+        }
+      });
+    
       setWeeklyTotal(weekTotal);
       setMonthlyTotal(monthTotal);
-    };
+      setBestCaloriesDay(maxCaloriesDate);
+      setBestExerciseDay(maxExerciseDate);
+    };    
 
     calculateTotals();
   }, [dailyCalories]);
@@ -167,25 +184,36 @@ export default function PlannerScreen() {
     }
   };
 
-  const addChallenge = () => {
-    if (newChallenge) {
-      setChallenges([...challenges, newChallenge]);
-      setNewChallenge('');
-    } else {
-      Alert.alert('Błąd', 'Proszę wprowadzić wyzwanie');
+  const saveChallenges = async (challenges) => {
+    try {
+      await AsyncStorage.setItem('challenges', JSON.stringify(challenges));
+    } catch (error) {
+      console.error('Failed to save challenges', error);
     }
+  };
+
+  const addChallenge = () => {
+    const updatedChallenges = [...challenges, newChallenge];
+    setChallenges(updatedChallenges);
+    setNewChallenge('');
+    saveChallenges(updatedChallenges);
   };
 
   const removeChallenge = (index) => {
     const updatedChallenges = challenges.filter((_, i) => i !== index);
     setChallenges(updatedChallenges);
+    saveChallenges(updatedChallenges);
   };
 
   const editChallenge = (index) => {
-    const updatedChallenges = [...challenges];
-    updatedChallenges[index] = editedChallenges[index];
+    const updatedChallenges = challenges.map((challenge, i) => 
+      i === index ? editedChallenges[index] : challenge
+    );
     setChallenges(updatedChallenges);
-    setEditedChallenges({ ...editedChallenges, [index]: '' });
+    saveChallenges(updatedChallenges);
+    const updatedEditedChallenges = { ...editedChallenges };
+    delete updatedEditedChallenges[index];
+    setEditedChallenges(updatedEditedChallenges);
   };
 
   const removeSchedule = (index) => {
@@ -349,7 +377,10 @@ export default function PlannerScreen() {
         <Text style={styles.heading}>Spalone kalorie</Text>
         <Calendar
           onDayPress={handleDayPress}
-          markedDates={{ [selectedDate]: { selected: true, selectedColor: 'blue' } }}
+          markedDates={{ [selectedDate]: { 
+            selected: true, 
+            selectedColor: 'pink',
+           } }}
         />
         <Text style={styles.selectedDate}>Wybrana data: {selectedDate}</Text>
         <TextInput
@@ -373,52 +404,53 @@ export default function PlannerScreen() {
 
           {Object.keys(dailyCalories).map((date) => (
             <View key={date} style={styles.calorieEntry}>
-              <Text>{date}: {dailyCalories[date]} kcal</Text>
-              <Button title="Usuń" style={styles.usun_btn} onPress={() => removeCalories(date)} />
+              <Text style={styles.entryText}>{date}: {dailyCalories[date]} kcal</Text>
+              <TouchableOpacity onPress={() => removeCalories(date)} style={styles.removeButton}>
+                <Text style={styles.removeButtonText}>Usuń</Text>
+              </TouchableOpacity>
             </View>
           ))}
       </View>
 
-        <View style={styles.personalBests}>
-          <Text style={styles.heading}>Najlepsze Wyniki</Text>
-          <View>
-            <Text>Gówno {personalBests.fastest5k}</Text>
-          </View>
-        </View>
-  
-        <View style={styles.challenges}>
-          <Text style={styles.heading}>Wyzwania</Text>
-          {challenges.map((challenge, index) => (
-            <View key={index} style={styles.row}>
-              <TextInput
-                style={styles.cell}
-                value={editedChallenges[index] || challenge}
-                onChangeText={(text) => {
-                  const updatedChallenges = { ...editedChallenges };
-                  updatedChallenges[index] = text;
-                  setEditedChallenges(updatedChallenges);
-                }}
-              />
-              <TouchableOpacity onPress={() => editChallenge(index)}>
-                <Text style={{ color: 'green', marginLeft: 10 }}>Zapisz</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => removeChallenge(index)}>
-                <Text style={{ color: 'red', marginLeft: 10 }}>Usuń</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-  
-          <Text style={styles.subheading}>Dodaj Wyzwanie:</Text>
-          <View style={styles.inputContainer}>
+      <View style={styles.personalBests}>
+        <Text style={styles.heading}>Najlepsze Wyniki</Text>
+        <Text>Dzień z największą ilością spalonych kalorii: {bestCaloriesDay}</Text>
+        <Text>Dzień z najdłuższym czasem wykonywanych ćwiczeń w obecnym tygodniu: {bestExerciseDay}</Text>
+      </View>
+
+      <View style={styles.challenges}>
+        <Text style={styles.heading}>Wyzwania</Text>
+        {challenges.map((challenge, index) => (
+          <View key={index} style={styles.row_wyzwania}>
             <TextInput
-              style={styles.input}
-              placeholder="Wyzwanie"
-              value={newChallenge}
-              onChangeText={setNewChallenge}
+              style={styles.cell}
+              value={editedChallenges[index] || challenge}
+              onChangeText={(text) => {
+                const updatedChallenges = { ...editedChallenges };
+                updatedChallenges[index] = text;
+                setEditedChallenges(updatedChallenges);
+              }}
             />
-            <Button title="Dodaj Wyzwanie" onPress={addChallenge} />
+            <TouchableOpacity onPress={() => editChallenge(index)}>
+              <Text style={{ color: 'green', marginLeft: 10 }}>Zapisz</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => removeChallenge(index)}>
+              <Text style={{ color: 'red', marginLeft: 10 }}>Usuń</Text>
+            </TouchableOpacity>
           </View>
+        ))}
+  
+        <Text style={styles.subheading}>Dodaj Wyzwanie:</Text>
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            placeholder="Wyzwanie"
+            value={newChallenge}
+            onChangeText={setNewChallenge}
+          />
+          <Button title="Dodaj Wyzwanie" onPress={addChallenge} />
         </View>
+      </View>
   
       </ScrollView>
     );
@@ -509,6 +541,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  row_wyzwania: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 5,
+  },
   cellHeader: {
     flex: 1,
     padding: 10,
@@ -555,9 +593,27 @@ const styles = StyleSheet.create({
     color: "#A94064",
     alignSelf: "center"
   },
-  usun_btn: {
-    backgroundColor: "red",
-    width: 100,
-  }
-  
+  calorieEntry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
+  },
+  entryText: {
+    flex: 1,
+  },
+  removeButton: {
+    backgroundColor: 'red',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 5,
+  },
+  removeButtonText: {
+    color: 'white',
+    fontSize: 12,
+    textAlign: 'center'
+  },
 });
